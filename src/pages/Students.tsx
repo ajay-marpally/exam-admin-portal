@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserCheck, Plus, Search, Edit2, Trash2, Upload, X } from 'lucide-react';
+import { UserCheck, Plus, Search, Edit2, Trash2, Upload, X, FileUp, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useRoleScope } from '../hooks/useRoleScope';
 import { Card } from '../components/ui/Card';
@@ -40,8 +40,10 @@ export function Students() {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
 
     // Form state
     const [formData, setFormData] = useState({
@@ -238,6 +240,105 @@ export function Students() {
         }
     };
 
+    const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage
+                .from('student_photos')
+                .upload(fileName, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('student_photos').getPublicUrl(fileName);
+            // This updates the local form state with the new URL
+            setFormData(prev => ({ ...prev, photo_url: data.publicUrl }));
+        } catch (error) {
+            console.error('Error uploading photo:', error);
+            alert('Failed to upload photo');
+        }
+    };
+
+    const handleCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            setIsSubmitting(true);
+            const text = await file.text();
+            // Simple logic: split by newline, then comma
+            // Expected Header: hall_ticket,name,email,centre_code
+            const rows = text.split('\n')
+                .map(r => r.trim())
+                .filter(r => r && !r.startsWith('hall_ticket')); // Skip header if present
+
+            setUploadProgress({ current: 0, total: rows.length });
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const cols = row.split(',').map(s => s.trim());
+                if (cols.length < 3) continue; // Basic validation
+
+                const [hall_ticket, name, email, centre_code] = cols;
+
+                try {
+                    // 1. Create User
+                    const { data: userData, error: userError } = await supabase
+                        .from('users')
+                        .insert({
+                            name: name,
+                            email: email.toLowerCase(),
+                            role: 'STUDENT',
+                            is_active: true,
+                        })
+                        .select()
+                        .single();
+
+                    if (userError) throw userError;
+
+                    // 2. Create Student
+                    const { error: studentError } = await supabase
+                        .from('students')
+                        .insert({
+                            user_id: userData.id,
+                            hall_ticket: hall_ticket,
+                            exam_center: centre_code || null,
+                        });
+
+                    if (studentError) {
+                        // Rollback user
+                        await supabase.from('users').delete().eq('id', userData.id);
+                        throw studentError;
+                    }
+
+                    successCount++;
+                } catch (e) {
+                    console.error(`Failed to import ${hall_ticket}:`, e);
+                    failCount++;
+                }
+
+                setUploadProgress(prev => ({ ...prev, current: i + 1 }));
+            }
+
+            alert(`Import Completed.\nSuccess: ${successCount}\nFailed: ${failCount}`);
+            setIsCsvModalOpen(false);
+            setUploadProgress({ current: 0, total: 0 });
+            fetchStudents();
+        } catch (error: any) {
+            console.error('CSV Import Error:', error);
+            alert('Failed to process CSV file');
+        } finally {
+            setIsSubmitting(false);
+            if (event.target) event.target.value = ''; // Reset input
+        }
+    };
+
     const openEditModal = (student: Student) => {
         setSelectedStudent(student);
         setFormData({
@@ -348,12 +449,21 @@ export function Students() {
                         Manage student records and hall tickets
                     </p>
                 </div>
-                <Button
-                    leftIcon={<Plus className="w-4 h-4" />}
-                    onClick={() => setIsCreateModalOpen(true)}
-                >
-                    Add Student
-                </Button>
+                <div className="flex bg-white dark:bg-surface-800 rounded-lg p-1 gap-1">
+                    <Button
+                        variant="secondary"
+                        leftIcon={<FileUp className="w-4 h-4" />}
+                        onClick={() => setIsCsvModalOpen(true)}
+                    >
+                        Import CSV
+                    </Button>
+                    <Button
+                        leftIcon={<Plus className="w-4 h-4" />}
+                        onClick={() => setIsCreateModalOpen(true)}
+                    >
+                        Add Student
+                    </Button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -436,12 +546,28 @@ export function Students() {
                         placeholder="e.g., HT2024001"
                         required
                     />
-                    <Input
-                        label="Photo URL (optional)"
-                        value={formData.photo_url}
-                        onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                        placeholder="https://..."
-                    />
+                    <div className="space-y-2">
+                        <Input
+                            label="Photo URL (optional)"
+                            value={formData.photo_url}
+                            onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                            placeholder="https://..."
+                        />
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePhotoUpload}
+                                className="block w-full text-sm text-slate-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-full file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-primary-50 file:text-primary-700
+                                  hover:file:bg-primary-100
+                                "
+                            />
+                        </div>
+                    </div>
                     <Select
                         label="Exam Centre"
                         options={[
@@ -482,12 +608,28 @@ export function Students() {
                         onChange={(e) => setFormData({ ...formData, hall_ticket: e.target.value })}
                         required
                     />
-                    <Input
-                        label="Photo URL"
-                        value={formData.photo_url}
-                        onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                        placeholder="https://..."
-                    />
+                    <div className="space-y-2">
+                        <Input
+                            label="Photo URL"
+                            value={formData.photo_url}
+                            onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                            placeholder="https://..."
+                        />
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePhotoUpload}
+                                className="block w-full text-sm text-slate-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-full file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-primary-50 file:text-primary-700
+                                  hover:file:bg-primary-100
+                                "
+                            />
+                        </div>
+                    </div>
                     <Select
                         label="Exam Centre"
                         options={[
@@ -514,6 +656,75 @@ export function Students() {
                 variant="danger"
                 isLoading={isSubmitting}
             />
+
+            {/* CSV Import Modal */}
+            <Modal
+                isOpen={isCsvModalOpen}
+                onClose={() => {
+                    if (!isSubmitting) setIsCsvModalOpen(false);
+                }}
+                title="Import Students from CSV"
+            >
+                <div className="space-y-6">
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                        <p className="font-semibold mb-2">CSV Format Required:</p>
+                        <code className="block bg-black/10 p-2 rounded">
+                            hall_ticket, name, email, centre_code
+                        </code>
+                        <p className="mt-2 text-xs">
+                            Note: The first row is assumed to be a header and will be skipped if it starts with "hall_ticket".
+                        </p>
+                    </div>
+
+                    {isSubmitting ? (
+                        <div className="text-center py-8">
+                            <Loader className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
+                            <p className="text-lg font-medium text-surface-900 dark:text-white">
+                                Importing Students...
+                            </p>
+                            <p className="text-surface-500">
+                                Processed {uploadProgress.current} of {uploadProgress.total}
+                            </p>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4 dark:bg-gray-700">
+                                <div
+                                    className="bg-primary-600 h-2.5 rounded-full transition-all duration-300"
+                                    style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8 text-center">
+                                <FileUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                                <label className="block">
+                                    <span className="sr-only">Choose CSV file</span>
+                                    <input
+                                        type="file"
+                                        accept=".csv"
+                                        onChange={handleCsvUpload}
+                                        className="block w-full text-sm text-slate-500
+                                          file:mr-4 file:py-2 file:px-4
+                                          file:rounded-full file:border-0
+                                          file:text-sm file:font-semibold
+                                          file:bg-primary-50 file:text-primary-700
+                                          hover:file:bg-primary-100
+                                          cursor-pointer
+                                        "
+                                    />
+                                </label>
+                                <p className="mt-2 text-xs text-gray-500">
+                                    Upload a .csv file containing student records
+                                </p>
+                            </div>
+                            <div className="flex justify-end">
+                                <Button variant="ghost" onClick={() => setIsCsvModalOpen(false)}>
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 }

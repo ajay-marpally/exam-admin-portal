@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, UserRole, GeographicScope, AuthState, getRolePermissions, RolePermissions } from '../types/auth';
+import { type User, type UserRole, type GeographicScope, type AuthState, getRolePermissions, type RolePermissions } from '../types/auth';
 import { logAuditEvent, AuditActions } from '../services/auditService';
 
 interface AuthContextValue extends AuthState {

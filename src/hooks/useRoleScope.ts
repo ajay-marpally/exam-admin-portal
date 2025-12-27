@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { UserRole, GeographicScope } from '../types/auth';
+import type { UserRole, GeographicScope } from '../types/auth';
 
 interface ScopeFilter {
     districtId?: string;

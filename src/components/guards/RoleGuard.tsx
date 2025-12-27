@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types/auth';
 
@@ -16,6 +16,7 @@ export function RoleGuard({
 }: RoleGuardProps) {
     const { isAuthenticated, isLoading, user } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
 
     // Show loading state
     if (isLoading) {
@@ -63,12 +64,12 @@ export function RoleGuard({
                     <p className="text-surface-600 dark:text-surface-400 mb-4">
                         You don't have permission to access this page.
                     </p>
-                    <a
-                        href="/dashboard"
-                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium hover:underline"
                     >
                         Go to Dashboard
-                    </a>
+                    </button>
                 </div>
             </div>
         );

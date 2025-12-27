@@ -66,7 +66,7 @@ export function Mandals() {
         try {
             setIsLoading(true);
 
-            let query = supabase
+            let mandalQuery = supabase
                 .from('mandals')
                 .select(`
           id,
@@ -76,27 +76,29 @@ export function Mandals() {
         `);
 
             if (districtFilter) {
-                query = query.eq('district_id', districtFilter);
+                mandalQuery = mandalQuery.eq('district_id', districtFilter);
             } else if (!isSuperAdmin && scope.mandalId) {
-                query = query.eq('id', scope.mandalId);
+                mandalQuery = mandalQuery.eq('id', scope.mandalId);
             }
 
-            const { data, error } = await query;
-            if (error) throw error;
+            // Run queries in parallel for better performance
+            const [mandalsRes, centresRes] = await Promise.all([
+                mandalQuery,
+                supabase.from('exam_centres').select('id, mandal_id, is_active'),
+            ]);
+
+            if (mandalsRes.error) throw mandalsRes.error;
+
+            const data = mandalsRes.data || [];
+            const centres = centresRes.data || [];
 
             // Get district name
-            if (data && data.length > 0) {
+            if (data.length > 0) {
                 setDistrictName((data[0] as any).districts?.name || '');
             }
 
-            // Fetch centre counts
-            const mandalIds = (data || []).map((m: any) => m.id);
-            const { data: centres } = await supabase
-                .from('exam_centres')
-                .select('id, mandal_id, is_active');
-
-            const mandalsWithStats: Mandal[] = (data || []).map((m: any) => {
-                const mandalCentres = (centres || []).filter((c: any) => c.mandal_id === m.id);
+            const mandalsWithStats: Mandal[] = data.map((m: any) => {
+                const mandalCentres = centres.filter((c: any) => c.mandal_id === m.id);
                 return {
                     id: m.id,
                     name: m.name,

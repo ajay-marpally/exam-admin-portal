@@ -97,7 +97,8 @@ export function Districts() {
         try {
             setIsLoading(true);
 
-            let query = supabase
+            // Build district query
+            let districtQuery = supabase
                 .from('districts')
                 .select(`
           id,
@@ -108,28 +109,27 @@ export function Districts() {
 
             // For district in-charge, only show their district
             if (!isSuperAdmin && scope.districtId) {
-                query = query.eq('id', scope.districtId);
+                districtQuery = districtQuery.eq('id', scope.districtId);
             }
 
-            const { data, error } = await query;
-            if (error) throw error;
+            // Run all queries in parallel for better performance
+            const [districtsRes, mandalsRes, centresRes] = await Promise.all([
+                districtQuery,
+                supabase.from('mandals').select('id, district_id'),
+                supabase.from('exam_centres').select('id, mandal_id'),
+            ]);
 
-            // Fetch mandal counts
-            const districtIds = (data || []).map((d: any) => d.id);
-            const { data: mandals } = await supabase
-                .from('mandals')
-                .select('id, district_id');
+            if (districtsRes.error) throw districtsRes.error;
 
-            // Fetch centre counts via mandals
-            const { data: centres } = await supabase
-                .from('exam_centres')
-                .select('id, mandal_id');
+            const data = districtsRes.data || [];
+            const mandals = mandalsRes.data || [];
+            const centres = centresRes.data || [];
 
             // Calculate counts and risk
-            const districtsWithStats: District[] = (data || []).map((d: any) => {
-                const districtMandals = (mandals || []).filter((m: any) => m.district_id === d.id);
+            const districtsWithStats: District[] = data.map((d: any) => {
+                const districtMandals = mandals.filter((m: any) => m.district_id === d.id);
                 const mandalIds = districtMandals.map((m: any) => m.id);
-                const districtCentres = (centres || []).filter((c: any) => mandalIds.includes(c.mandal_id));
+                const districtCentres = centres.filter((c: any) => mandalIds.includes(c.mandal_id));
 
                 // Mock alert count and risk level - would come from real data
                 const alert_count = Math.floor(Math.random() * 20);

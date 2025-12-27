@@ -32,6 +32,7 @@ const Students = lazy(() => import('./pages/Students').then(m => ({ default: m.S
 const Users = lazy(() => import('./pages/Users').then(m => ({ default: m.Users })));
 const Exams = lazy(() => import('./pages/Exams').then(m => ({ default: m.Exams })));
 const HallTickets = lazy(() => import('./pages/HallTickets').then(m => ({ default: m.HallTickets })));
+const Questions = lazy(() => import('./pages/Questions').then(m => ({ default: m.Questions })));
 
 // Create a client
 const queryClient = new QueryClient({
@@ -112,6 +113,14 @@ function App() {
                   }
                 />
                 <Route path="/centres" element={<Centres />} />
+                <Route
+                  path="/questions"
+                  element={
+                    <RoleGuard allowedRoles={['SUPER_ADMIN', 'DISTRICT_IN_CHARGE']}>
+                      <Questions />
+                    </RoleGuard>
+                  }
+                />
                 <Route
                   path="/reports"
                   element={

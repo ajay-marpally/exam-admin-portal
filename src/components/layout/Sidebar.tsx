@@ -73,6 +73,12 @@ const navItems: NavItem[] = [
         roles: ['SUPER_ADMIN', 'DISTRICT_IN_CHARGE'],
     },
     {
+        path: '/questions',
+        label: 'Questions',
+        icon: <FileText className="w-5 h-5" />,
+        roles: ['SUPER_ADMIN', 'DISTRICT_IN_CHARGE'],
+    },
+    {
         path: '/hall-tickets',
         label: 'Hall Tickets',
         icon: <Ticket className="w-5 h-5" />,

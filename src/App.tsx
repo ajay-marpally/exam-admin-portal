@@ -7,6 +7,7 @@ import { MainLayout } from './components/layout/MainLayout';
 
 // Pages
 import { Login } from './pages/Login';
+import { Signup } from './pages/Signup'; // TEMPORARY - Delete before production
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { Dashboard } from './pages/Dashboard';
@@ -40,6 +41,7 @@ function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} /> {/* TEMPORARY - Delete before production */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 

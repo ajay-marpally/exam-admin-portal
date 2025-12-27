@@ -156,7 +156,16 @@ export function Login() {
                 </form>
 
                 {/* Footer */}
-                <div className="mt-8 pt-6 border-t border-surface-200 dark:border-surface-700 text-center">
+                <div className="mt-8 pt-6 border-t border-surface-200 dark:border-surface-700 text-center space-y-2">
+                    <p className="text-sm text-surface-600 dark:text-surface-400">
+                        Don't have an account?{' '}
+                        <Link
+                            to="/signup"
+                            className="text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                        >
+                            Create Account
+                        </Link>
+                    </p>
                     <p className="text-xs text-surface-500 dark:text-surface-400">
                         Authorized personnel only. All activities are logged.
                     </p>

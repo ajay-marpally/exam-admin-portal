@@ -15,6 +15,10 @@ import {
     ChevronLeft,
     ChevronRight,
     Shield,
+    UserCheck,
+    Users,
+    BookOpen,
+    Ticket,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -50,6 +54,29 @@ const navItems: NavItem[] = [
         path: '/evidence',
         label: 'Evidence Review',
         icon: <FileSearch className="w-5 h-5" />,
+    },
+    {
+        path: '/students',
+        label: 'Students',
+        icon: <UserCheck className="w-5 h-5" />,
+    },
+    {
+        path: '/users',
+        label: 'Admin Users',
+        icon: <Users className="w-5 h-5" />,
+        roles: ['SUPER_ADMIN'],
+    },
+    {
+        path: '/exams',
+        label: 'Exams',
+        icon: <BookOpen className="w-5 h-5" />,
+        roles: ['SUPER_ADMIN', 'DISTRICT_IN_CHARGE'],
+    },
+    {
+        path: '/hall-tickets',
+        label: 'Hall Tickets',
+        icon: <Ticket className="w-5 h-5" />,
+        roles: ['SUPER_ADMIN', 'DISTRICT_IN_CHARGE'],
     },
     {
         path: '/districts',

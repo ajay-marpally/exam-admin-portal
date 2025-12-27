@@ -21,6 +21,10 @@ import { Centres } from './pages/Centres';
 import { Reports } from './pages/Reports';
 import { Exports } from './pages/Exports';
 import { AuditLogs } from './pages/AuditLogs';
+import { Students } from './pages/Students';
+import { Users } from './pages/Users';
+import { Exams } from './pages/Exams';
+import { HallTickets } from './pages/HallTickets';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -58,6 +62,31 @@ function App() {
               <Route path="/cctv" element={<CCTVView />} />
               <Route path="/alerts" element={<AlertQueue />} />
               <Route path="/evidence" element={<EvidenceReview />} />
+              <Route path="/students" element={<Students />} />
+              <Route
+                path="/users"
+                element={
+                  <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+                    <Users />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/exams"
+                element={
+                  <RoleGuard allowedRoles={['SUPER_ADMIN', 'DISTRICT_IN_CHARGE']}>
+                    <Exams />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/hall-tickets"
+                element={
+                  <RoleGuard allowedRoles={['SUPER_ADMIN', 'DISTRICT_IN_CHARGE']}>
+                    <HallTickets />
+                  </RoleGuard>
+                }
+              />
               <Route
                 path="/districts"
                 element={

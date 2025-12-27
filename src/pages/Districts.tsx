@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, AlertTriangle, Building2, ChevronRight } from 'lucide-react';
+import { MapPin, AlertTriangle, Building2, ChevronRight, Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useRoleScope } from '../hooks/useRoleScope';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Table } from '../components/ui/Table';
 import { Badge, SeverityBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { Modal, ConfirmModal } from '../components/ui/Modal';
 
 interface District {
     id: string;
@@ -19,11 +22,38 @@ interface District {
     risk_level: 'low' | 'medium' | 'high';
 }
 
+interface State {
+    id: string;
+    name: string;
+}
+
 export function Districts() {
     const navigate = useNavigate();
     const { isSuperAdmin, scope } = useRoleScope();
     const [isLoading, setIsLoading] = useState(true);
     const [districts, setDistricts] = useState<District[]>([]);
+    const [states, setStates] = useState<State[]>([]);
+
+    // Modal states
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [selectedDistrict, setSelectedDistrict] = useState<District | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Form state
+    const [formData, setFormData] = useState({
+        name: '',
+        state_id: '',
+    });
+
+    const fetchStates = useCallback(async () => {
+        const { data } = await supabase
+            .from('states')
+            .select('id, name')
+            .order('name');
+        setStates(data || []);
+    }, []);
 
     const fetchDistricts = useCallback(async () => {
         try {
@@ -88,8 +118,111 @@ export function Districts() {
     }, [isSuperAdmin, scope]);
 
     useEffect(() => {
+        fetchStates();
         fetchDistricts();
-    }, [fetchDistricts]);
+    }, [fetchStates, fetchDistricts]);
+
+    const resetForm = () => {
+        setFormData({ name: '', state_id: '' });
+    };
+
+    const handleCreate = async () => {
+        if (!formData.name.trim() || !formData.state_id) {
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            const { error } = await supabase
+                .from('districts')
+                .insert({
+                    name: formData.name.trim(),
+                    state_id: formData.state_id,
+                });
+
+            if (error) throw error;
+
+            setIsCreateModalOpen(false);
+            resetForm();
+            fetchDistricts();
+        } catch (error) {
+            console.error('Error creating district:', error);
+            alert('Failed to create district');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleEdit = async () => {
+        if (!selectedDistrict || !formData.name.trim()) {
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+
+            const { error } = await supabase
+                .from('districts')
+                .update({
+                    name: formData.name.trim(),
+                    state_id: formData.state_id,
+                })
+                .eq('id', selectedDistrict.id);
+
+            if (error) throw error;
+
+            setIsEditModalOpen(false);
+            setSelectedDistrict(null);
+            resetForm();
+            fetchDistricts();
+        } catch (error) {
+            console.error('Error updating district:', error);
+            alert('Failed to update district');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!selectedDistrict) return;
+
+        try {
+            setIsSubmitting(true);
+
+            const { error } = await supabase
+                .from('districts')
+                .delete()
+                .eq('id', selectedDistrict.id);
+
+            if (error) throw error;
+
+            setIsDeleteModalOpen(false);
+            setSelectedDistrict(null);
+            fetchDistricts();
+        } catch (error) {
+            console.error('Error deleting district:', error);
+            alert('Failed to delete district. It may have associated mandals.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const openEditModal = (district: District) => {
+        setSelectedDistrict(district);
+        setFormData({
+            name: district.name,
+            state_id: district.state_id,
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const openDeleteModal = (district: District) => {
+        setSelectedDistrict(district);
+        setIsDeleteModalOpen(true);
+    };
 
     const columns = [
         {
@@ -154,22 +287,72 @@ export function Districts() {
         },
         {
             key: 'actions',
-            header: '',
+            header: 'Actions',
             render: (item: District) => (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate(`/mandals?district=${item.id}`)}
-                    rightIcon={<ChevronRight className="w-4 h-4" />}
-                >
-                    View
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(item);
+                        }}
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openDeleteModal(item);
+                        }}
+                    >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/mandals?district=${item.id}`);
+                        }}
+                        rightIcon={<ChevronRight className="w-4 h-4" />}
+                    >
+                        View
+                    </Button>
+                </div>
             ),
         },
     ];
 
+    const stateOptions = states.map(s => ({ value: s.id, label: s.name }));
+
     return (
         <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-surface-900 dark:text-white">
+                        Districts
+                    </h1>
+                    <p className="text-surface-500 dark:text-surface-400">
+                        Manage district administrative areas
+                    </p>
+                </div>
+                {isSuperAdmin && (
+                    <Button
+                        leftIcon={<Plus className="w-4 h-4" />}
+                        onClick={() => {
+                            resetForm();
+                            setIsCreateModalOpen(true);
+                        }}
+                    >
+                        Add District
+                    </Button>
+                )}
+            </div>
+
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card padding="md" className="text-center">
@@ -200,6 +383,102 @@ export function Districts() {
                 isLoading={isLoading}
                 emptyMessage="No districts found"
                 onRowClick={(item) => navigate(`/mandals?district=${item.id}`)}
+            />
+
+            {/* Create Modal */}
+            <Modal
+                isOpen={isCreateModalOpen}
+                onClose={() => {
+                    setIsCreateModalOpen(false);
+                    resetForm();
+                }}
+                title="Add New District"
+                size="md"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleCreate} isLoading={isSubmitting}>
+                            Create District
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="District Name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="Enter district name"
+                        required
+                    />
+                    <Select
+                        label="State"
+                        options={[
+                            { value: '', label: 'Select State' },
+                            ...stateOptions,
+                        ]}
+                        value={formData.state_id}
+                        onChange={(e) => setFormData({ ...formData, state_id: e.target.value })}
+                    />
+                </div>
+            </Modal>
+
+            {/* Edit Modal */}
+            <Modal
+                isOpen={isEditModalOpen}
+                onClose={() => {
+                    setIsEditModalOpen(false);
+                    setSelectedDistrict(null);
+                    resetForm();
+                }}
+                title="Edit District"
+                size="md"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setIsEditModalOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleEdit} isLoading={isSubmitting}>
+                            Save Changes
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="District Name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="Enter district name"
+                        required
+                    />
+                    <Select
+                        label="State"
+                        options={[
+                            { value: '', label: 'Select State' },
+                            ...stateOptions,
+                        ]}
+                        value={formData.state_id}
+                        onChange={(e) => setFormData({ ...formData, state_id: e.target.value })}
+                    />
+                </div>
+            </Modal>
+
+            {/* Delete Confirmation */}
+            <ConfirmModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => {
+                    setIsDeleteModalOpen(false);
+                    setSelectedDistrict(null);
+                }}
+                onConfirm={handleDelete}
+                title="Delete District"
+                message={`Are you sure you want to delete "${selectedDistrict?.name}"? This will also delete all associated mandals and centres. This action cannot be undone.`}
+                confirmText="Delete"
+                variant="danger"
+                isLoading={isSubmitting}
             />
         </div>
     );

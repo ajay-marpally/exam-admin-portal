@@ -67,26 +67,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Initialize auth state
     useEffect(() => {
+        let isMounted = true;
+
         const initAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+            try {
+                // Add timeout to prevent infinite hanging
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth timeout')), 10000)
+                );
 
-            if (session?.user) {
-                const profile = await fetchUserProfile(session.user.id);
-                if (profile) {
-                    const scope: GeographicScope = {
-                        districtId: profile.district_id,
-                        mandalId: profile.mandal_id,
-                        centreId: profile.centre_id,
-                    };
+                const sessionPromise = supabase.auth.getSession();
+                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
 
-                    setState({
-                        user: profile,
-                        isLoading: false,
-                        isAuthenticated: true,
-                        scope,
-                    });
-                    setPermissions(getRolePermissions(profile.role));
-                } else {
+                if (!isMounted) return;
+
+                if (session?.user) {
+                    try {
+                        const profile = await fetchUserProfile(session.user.id);
+                        if (!isMounted) return;
+
+                        if (profile) {
+                            const scope: GeographicScope = {
+                                districtId: profile.district_id,
+                                mandalId: profile.mandal_id,
+                                centreId: profile.centre_id,
+                            };
+
+                            setState({
+                                user: profile,
+                                isLoading: false,
+                                isAuthenticated: true,
+                                scope,
+                            });
+                            setPermissions(getRolePermissions(profile.role));
+                            return;
+                        }
+                    } catch (profileError) {
+                        console.error('Error fetching profile:', profileError);
+                    }
+                }
+
+                // No session or profile fetch failed
+                if (isMounted) {
                     setState({
                         user: null,
                         isLoading: false,
@@ -94,13 +116,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         scope: {},
                     });
                 }
-            } else {
-                setState({
-                    user: null,
-                    isLoading: false,
-                    isAuthenticated: false,
-                    scope: {},
-                });
+            } catch (error) {
+                console.error('Auth initialization error:', error);
+                // Always set loading to false on error
+                if (isMounted) {
+                    setState({
+                        user: null,
+                        isLoading: false,
+                        isAuthenticated: false,
+                        scope: {},
+                    });
+                }
             }
         };
 
@@ -108,22 +134,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' && session?.user) {
-                const profile = await fetchUserProfile(session.user.id);
-                if (profile) {
-                    const scope: GeographicScope = {
-                        districtId: profile.district_id,
-                        mandalId: profile.mandal_id,
-                        centreId: profile.centre_id,
-                    };
+            if (!isMounted) return;
 
-                    setState({
-                        user: profile,
-                        isLoading: false,
-                        isAuthenticated: true,
-                        scope,
-                    });
-                    setPermissions(getRolePermissions(profile.role));
+            if (event === 'SIGNED_IN' && session?.user) {
+                try {
+                    const profile = await fetchUserProfile(session.user.id);
+                    if (profile && isMounted) {
+                        const scope: GeographicScope = {
+                            districtId: profile.district_id,
+                            mandalId: profile.mandal_id,
+                            centreId: profile.centre_id,
+                        };
+
+                        setState({
+                            user: profile,
+                            isLoading: false,
+                            isAuthenticated: true,
+                            scope,
+                        });
+                        setPermissions(getRolePermissions(profile.role));
+                    }
+                } catch (error) {
+                    console.error('Error in auth state change:', error);
                 }
             } else if (event === 'SIGNED_OUT') {
                 setState({
@@ -136,7 +168,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        };
     }, [fetchUserProfile]);
 
     const login = async (email: string, password: string): Promise<{ error: string | null }> => {

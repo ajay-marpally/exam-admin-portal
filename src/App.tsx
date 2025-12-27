@@ -7,6 +7,8 @@ import { MainLayout } from './components/layout/MainLayout';
 
 // Pages
 import { Login } from './pages/Login';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Dashboard } from './pages/Dashboard';
 import { LiveMonitoring } from './pages/LiveMonitoring';
 import { CCTVView } from './pages/CCTVView';
@@ -38,6 +40,8 @@ function App() {
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Protected routes */}
             <Route

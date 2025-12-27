@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Shield, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -144,6 +144,15 @@ export function Login() {
                     >
                         Sign In
                     </Button>
+
+                    <div className="text-center">
+                        <Link
+                            to="/forgot-password"
+                            className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                            Forgot your password?
+                        </Link>
+                    </div>
                 </form>
 
                 {/* Footer */}

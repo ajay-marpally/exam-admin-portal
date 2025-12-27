@@ -133,29 +133,53 @@ export function Students() {
     };
 
     const handleCreate = async () => {
+        if (!formData.hall_ticket.trim() || !formData.name.trim() || !formData.email.trim()) {
+            alert('Please fill in hall ticket, name, and email');
+            return;
+        }
+
         try {
             setIsSubmitting(true);
 
-            // First create auth user if email provided
-            let userId = crypto.randomUUID();
+            // First create a user record (required FK for students table)
+            const { data: userData, error: userError } = await supabase
+                .from('users')
+                .insert({
+                    name: formData.name.trim(),
+                    email: formData.email.trim().toLowerCase(),
+                    role: 'STUDENT',
+                    is_active: true,
+                })
+                .select()
+                .single();
 
-            const { error } = await supabase
+            if (userError) {
+                console.error('Error creating user:', userError);
+                throw new Error(`Failed to create user: ${userError.message}`);
+            }
+
+            // Now create the student record with the user_id FK
+            const { error: studentError } = await supabase
                 .from('students')
                 .insert({
-                    user_id: userId,
-                    hall_ticket: formData.hall_ticket,
+                    user_id: userData.id,
+                    hall_ticket: formData.hall_ticket.trim(),
                     photo_url: formData.photo_url || null,
                     exam_center: formData.exam_center || null,
                 });
 
-            if (error) throw error;
+            if (studentError) {
+                // Rollback: delete the user if student creation fails
+                await supabase.from('users').delete().eq('id', userData.id);
+                throw new Error(`Failed to create student: ${studentError.message}`);
+            }
 
             setIsCreateModalOpen(false);
             resetForm();
             fetchStudents();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating student:', error);
-            alert('Failed to create student');
+            alert(error.message || 'Failed to create student');
         } finally {
             setIsSubmitting(false);
         }

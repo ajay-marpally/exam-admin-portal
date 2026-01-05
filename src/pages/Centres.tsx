@@ -15,7 +15,6 @@ interface Centre {
     id: string;
     centre_code: string;
     name: string;
-    city: string;
     mandal_id?: string;
     mandal_name?: string;
     total_labs: number;
@@ -41,42 +40,44 @@ export function Centres() {
         try {
             setIsLoading(true);
 
-            let query = supabase
+            let centresQuery = supabase
                 .from('exam_centres')
                 .select(`
-          id,
-          centre_code,
-          name,
-          city,
-          mandal_id,
-          total_labs,
-          total_seats,
-          has_cctv,
-          is_active,
-          mandals(name)
-        `);
+                    id,
+                    centre_code,
+                    name,
+                    mandal_id,
+                    total_labs,
+                    total_seats,
+                    has_cctv,
+                    is_active,
+                    mandals(name)
+                `);
 
             if (mandalFilter) {
-                query = query.eq('mandal_id', mandalFilter);
+                centresQuery = centresQuery.eq('mandal_id', mandalFilter);
             } else if (!isSuperAdmin && scope.centreId) {
-                query = query.eq('id', scope.centreId);
+                centresQuery = centresQuery.eq('id', scope.centreId);
             }
 
-            const { data, error } = await query;
-            if (error) throw error;
+            // Run both queries in PARALLEL instead of sequentially
+            const [centresResult, camerasResult] = await Promise.all([
+                centresQuery,
+                supabase.from('cctv_cameras').select('id, exam_center')
+            ]);
+
+            if (centresResult.error) throw centresResult.error;
+            const data = centresResult.data;
+            const cameras = camerasResult.data;
 
             if (data && data.length > 0) {
                 setMandalName((data[0] as any).mandals?.name || '');
             }
 
-            // Fetch camera counts
-            const { data: cameras } = await supabase.from('cctv_cameras').select('id, exam_center');
-
             const centresWithStats: Centre[] = (data || []).map((c: any) => ({
                 id: c.id,
                 centre_code: c.centre_code,
                 name: c.name,
-                city: c.city,
                 mandal_id: c.mandal_id,
                 mandal_name: c.mandals?.name,
                 total_labs: c.total_labs || 0,
@@ -96,13 +97,14 @@ export function Centres() {
         }
     }, [mandalFilter, isSuperAdmin, scope]);
 
-    const [mandals, setMandals] = useState<{ id: string, name: string }[]>([]);
+    const [mandals, setMandals] = useState<{ id: string, name: string, district_id: string }[]>([]);
+    const [districts, setDistricts] = useState<{ id: string, name: string }[]>([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         centre_code: '',
         name: '',
-        city: '',
+        district_id: '',
         mandal_id: '',
         total_labs: 0,
         total_seats: 0,
@@ -110,14 +112,20 @@ export function Centres() {
     });
 
     const fetchMandals = useCallback(async () => {
-        const { data } = await supabase.from('mandals').select('id, name').order('name');
+        const { data } = await supabase.from('mandals').select('id, name, district_id').order('name');
         setMandals(data || []);
+    }, []);
+
+    const fetchDistricts = useCallback(async () => {
+        const { data } = await supabase.from('districts').select('id, name').order('name');
+        setDistricts(data || []);
     }, []);
 
     useEffect(() => {
         fetchCentres();
         fetchMandals();
-    }, [fetchCentres, fetchMandals]);
+        fetchDistricts();
+    }, [fetchCentres, fetchMandals, fetchDistricts]);
 
     const handleCreate = async () => {
         if (!formData.centre_code || !formData.name || !formData.mandal_id) {
@@ -130,7 +138,6 @@ export function Centres() {
             const { error } = await supabase.from('exam_centres').insert({
                 centre_code: formData.centre_code,
                 name: formData.name,
-                city: formData.city,
                 mandal_id: formData.mandal_id,
                 total_labs: Number(formData.total_labs),
                 total_seats: Number(formData.total_seats),
@@ -144,7 +151,7 @@ export function Centres() {
             setFormData({
                 centre_code: '',
                 name: '',
-                city: '',
+                district_id: '',
                 mandal_id: '',
                 total_labs: 0,
                 total_seats: 0,
@@ -171,7 +178,7 @@ export function Centres() {
                     <div>
                         <p className="font-medium text-surface-900 dark:text-white">{item.name}</p>
                         <p className="text-xs text-surface-500 dark:text-surface-400">
-                            {item.centre_code} • {item.city}
+                            {item.centre_code}
                         </p>
                     </div>
                 </div>
@@ -262,7 +269,7 @@ export function Centres() {
                     )}
                     <div>
                         <h1 className="text-2xl font-bold text-surface-900 dark:text-white">
-                            Exam Centres {mandalName ? `- ${mandalName}` : ''}
+                            Exam Centres {mandalName ? `- ${mandalName} ` : ''}
                         </h1>
                         <p className="text-surface-500 dark:text-surface-400">
                             Manage exam centres and facilities
@@ -331,21 +338,33 @@ export function Centres() {
                             onChange={(e) => setFormData({ ...formData, centre_code: e.target.value })}
                             placeholder="e.g. GPC001"
                         />
-                        <Input
-                            label="City"
-                            value={formData.city}
-                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                            placeholder="e.g. Guntur"
-                        />
                     </div>
+                    <Select
+                        label="District"
+                        value={formData.district_id}
+                        onChange={(e) => {
+                            setFormData({
+                                ...formData,
+                                district_id: e.target.value,
+                                mandal_id: '' // Reset mandal when district changes
+                            });
+                        }}
+                        options={[
+                            { value: '', label: 'Select District' },
+                            ...districts.map(d => ({ value: d.id, label: d.name }))
+                        ]}
+                    />
                     <Select
                         label="Mandal"
                         value={formData.mandal_id}
                         onChange={(e) => setFormData({ ...formData, mandal_id: e.target.value })}
                         options={[
                             { value: '', label: 'Select Mandal' },
-                            ...mandals.map(m => ({ value: m.id, label: m.name }))
+                            ...mandals
+                                .filter(m => !formData.district_id || m.district_id === formData.district_id)
+                                .map(m => ({ value: m.id, label: m.name }))
                         ]}
+                        disabled={!formData.district_id}
                     />
                     <div className="grid grid-cols-2 gap-4">
                         <Input

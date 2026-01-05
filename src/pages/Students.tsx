@@ -90,17 +90,13 @@ export function Students() {
             const { data, error } = await query.order('created_at', { ascending: false });
             if (error) throw error;
 
-            // Enrich with centre names
-            const enrichedStudents = await Promise.all((data || []).map(async (student) => {
-                if (student.exam_center) {
-                    const { data: centre } = await supabase
-                        .from('exam_centres')
-                        .select('name')
-                        .eq('centre_code', student.exam_center)
-                        .single();
-                    return { ...student, centre_name: centre?.name };
-                }
-                return student;
+            // Build a lookup map from centres (already fetched by fetchCentres)
+            const centreMap = new Map(centres.map(c => [c.centre_code, c.name]));
+
+            // Enrich with centre names using in-memory lookup (NO database calls!)
+            const enrichedStudents = (data || []).map((student) => ({
+                ...student,
+                centre_name: centreMap.get(student.exam_center)
             }));
 
             setStudents(enrichedStudents);
@@ -109,12 +105,18 @@ export function Students() {
         } finally {
             setIsLoading(false);
         }
-    }, [isSuperAdmin, scope, selectedCentre]);
+    }, [isSuperAdmin, scope, selectedCentre, centres]);
 
     useEffect(() => {
         fetchCentres();
-        fetchStudents();
-    }, [fetchCentres, fetchStudents]);
+    }, [fetchCentres]);
+
+    useEffect(() => {
+        // Only fetch students after centres are loaded
+        if (centres.length > 0) {
+            fetchStudents();
+        }
+    }, [fetchStudents, centres.length]);
 
     const filteredStudents = students.filter(student => {
         const matchesSearch =
